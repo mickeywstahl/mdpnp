@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.chart.LineChart?>
+<?import javafx.scene.chart.NumberAxis?>
+<?import javafx.scene.layout.VBox?>
+
+<VBox xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.mdpnp.apps.testapp.pleth.validity.PlethValidityApp">
+    <children>
+        <LineChart fx:id="plethChart" title="Plethysmograph" animated="false">
+            <xAxis>
+                <NumberAxis label="Time" />
+            </xAxis>
+            <yAxis>
+                <NumberAxis label="Value" />
+            </yAxis>
+        </LineChart>
+        <LineChart fx:id="spo2Chart" title="SpO2" animated="false">
+            <xAxis>
+                <NumberAxis label="Time" />
+            </xAxis>
+            <yAxis>
+                <NumberAxis label="Value" />
+            </yAxis>
+        </LineChart>
+        <LineChart fx:id="validationChart" title="Validation Status" animated="false">
+            <xAxis>
+                <NumberAxis label="Time" />
+            </xAxis>
+            <yAxis>
+                <NumberAxis label="Status (0=Invalid, 1=Limited, 2=Valid)" lowerBound="-0.5" upperBound="2.5" tickUnit="1" />
+            </yAxis>
+        </LineChart>
+    </children>
+</VBox>
