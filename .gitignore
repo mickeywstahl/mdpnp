@@ -1,38 +1,42 @@
-*~
-build
-bin
-gen
-.DS_Store
-generated
-.jnilib
+# Gradle
 .gradle
-.settings/
-.project
-.ecpproperties
+build/
+!build/wrapper/gradle-wrapper.jar
+
+# IDE - IntelliJ
+.idea/
+*.iml
+
+# IDE - Eclipse
 .classpath
+.project
+.settings/
+
+# Local files
+local.properties
+*.pro.user*
+.keystore
+id_file
+
+# OS-generated files
+.DS_Store
+*~
+hs_err*
+
+# Custom ignores
+interop-lab/demo-apps/demo-app.csv*
+.nddshome/
+.metadata/
+docbox-himss-2014/obj
+docbox-himss-2014/src_dds
+gen/
+bin/
+generated/
+.jnilib
 .externalToolBuilders/
 .JumpStartSettings
-local.properties
 .apt_generated/
 .factorypath
 .gwt/
 gwt-unitCache/
 appengine-generated/
-lib/
-classes/
-clinical_scenarios/
-*.pro.user*
-*build-*Release/
-*build-*Debug/
-*.jar
-hs_err*
-.nddshome/
-.metadata/
-docbox-himss-2014/obj
-docbox-himss-2014/src_dds
-**/.idea/
-**/*.log*
-.keystore
-*.iml
-interop-lab/demo-apps/demo-app.csv*
-id_file

@@ -446,7 +446,6 @@ public class AclivaTestApplication {
 
             double  timeMin           = 0.0;
             double  currentBis        = 93.0;
-            double  currentRate       = 0.0;   // FIX: running rate accumulated by PID
             boolean inductionComplete = false;
 
             try {
@@ -457,33 +456,28 @@ public class AclivaTestApplication {
                     if (timeMin < inductionEnd) {
                         // Fixed induction bolus — no feedback
                         phase = "Induction";
-                        pumpAdapter.setRate(INDUCTION_RATE);        // FIX: keeps simulator in sync
-                        setFlowRate((float)(INDUCTION_RATE));       // also commands real pump via DDS
+//                        pumpAdapter.setRate(INDUCTION_RATE);
+                        setFlowRate((float)(INDUCTION_RATE));
 
                     } else if (timeMin < maintEnd) {
                         if (!inductionComplete) {
                             inductionComplete = true;
                             controller.reset();
-                            currentRate = MAINTENANCE_RATE;         // FIX: seed running rate
                         }
                         phase = "Maintenance";
                         // Dead band ±5 BIS units — ignore noise, prevent micro-switching
                         double bisError = currentBis - 50.0;
                         if (Math.abs(bisError) > 5.0) {
-                            // FIX: accumulate PID delta onto running rate (was sign-check only)
-                            double delta = controller.calculateDeltaRate(currentBis, dt);
-                            currentRate += delta;
-                            currentRate = Math.max(pumpAdapter.getMinRate(),
-                                         Math.min(pumpAdapter.getMaxRate(), currentRate));
-                            pumpAdapter.setRate(currentRate);       // FIX: keeps simulator in sync
-                            setFlowRate((float) currentRate);       // also commands real pump via DDS
+                            double pidOutput = controller.calculateDeltaRate(currentBis, dt);
+//                            pumpAdapter.setRate(pidOutput > 0 ? MAINTENANCE_RATE : 0.0);
+                            setFlowRate((float)(pidOutput > 0 ? MAINTENANCE_RATE : 0.0));
                         }
                         // Inside dead band — hold current rate unchanged
 
                     } else {
                         phase = "Recovery";
-                        pumpAdapter.setRate(0.0);                   // FIX: keeps simulator in sync
-                        setFlowRate((float)(0.0));                  // also commands real pump via DDS
+//                        pumpAdapter.setRate(0.0);
+                        setFlowRate((float)(0.0));
                     }
 
                     numeric.forEach( n -> {
@@ -494,11 +488,12 @@ public class AclivaTestApplication {
                     // Advance patient model (sim) or read real monitor (live)
                     currentBis = bisSource.getBIS();
                     final double ce          = bisSource.getCe();
-                    final double displayRate = pumpAdapter.getLastCommandedRate(); // FIX: was reading DDS numeric (always stale/zero)
+//                    final double currentRate = pumpAdapter.getLastCommandedRate();
+                    final double currentRate = flowRateFromSelectedPump[0].getValue();
 
                     final double t = timeMin;
                     final double b = currentBis;
-                    final double r = displayRate;
+                    final double r = currentRate;
                     final double c = ce;
                     final String p = phase;
 
@@ -538,7 +533,8 @@ public class AclivaTestApplication {
                 });
 
                 final double finalBis  = currentBis;
-                final double finalRate = pumpAdapter.getLastCommandedRate(); // FIX: was reading DDS numeric
+//                final double finalRate = pumpAdapter.getLastCommandedRate();
+                final double finalRate = flowRateFromSelectedPump[0].getValue();
                 final double finalCe   = bisSource.getCe();
                 final int    fm        = (int) timeMin;
                 final int    fs        = (int) ((timeMin - fm) * 60);

@@ -25,3 +25,4 @@ org.mdpnp.apps.testapp.vents.VentilatorsApplicationFactory
 org.mdpnp.apps.testapp.vents.control.VentControlApplicationFactory
 org.mdpnp.apps.testapp.pleth.validity.PlethValidityAppFactory
 org.mdpnp.apps.testapp.acliva.AclivaTestApplicationFactory
+org.mdpnp.apps.testapp.mddt.MddtEcipAppFactory
