@@ -148,7 +148,7 @@ public class DDSDataLoggerApp {
 
     // Timestamp format for ISO column
     private static final SimpleDateFormat ISO_FMT =
-        new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS");
+        new SimpleDateFormat("yyyy-MM-dd HH:mm:ss,SSS");
 
     // -------------------------------------------------------------------------
     // Per-metric state (for inter-sample interval and latency computation)
