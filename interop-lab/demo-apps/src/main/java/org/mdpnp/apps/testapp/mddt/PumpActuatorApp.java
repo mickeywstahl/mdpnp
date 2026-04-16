@@ -35,11 +35,16 @@ import javafx.collections.ListChangeListener;
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
+import javafx.scene.control.ListView;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.Spinner;
 import javafx.scene.control.SpinnerValueFactory;
 import javafx.scene.control.TextArea;
+import javafx.util.Callback;
+import javafx.util.StringConverter;
 
 /**
  * MDDT Pump Actuator Application.
@@ -82,11 +87,13 @@ public class PumpActuatorApp {
     private static final float BAD_RATE_OVER  =  9999f;
     private static final float BAD_RATE_UNDER = -1f;
 
+    private final String FLOW_RATE = rosetta.MDC_FLOW_FLUID_PUMP.VALUE;
+
     // -------------------------------------------------------------------------
     // FXML UI
     // -------------------------------------------------------------------------
     @FXML TextArea statusArea;
-    @FXML Label connectedPumpLabel;
+    @FXML ComboBox<Device> pumps;
     @FXML Label trialProgressLabel;
     @FXML ProgressBar trialProgressBar;
 
@@ -117,7 +124,6 @@ public class PumpActuatorApp {
     // -------------------------------------------------------------------------
     // State
     // -------------------------------------------------------------------------
-    private volatile Device targetDevice;
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final AtomicInteger completedTrials = new AtomicInteger(0);
 
@@ -162,7 +168,67 @@ public class PumpActuatorApp {
         });
 
         initSpinners();
-        discoverPump();
+        
+        //Rely on addition of metrics to add devices...
+		numericList.addListener((ListChangeListener<NumericFx>) change -> {
+			while (change.next()) {
+				change.getAddedSubList().forEach(n -> {
+					if (FLOW_RATE.equals(n.getMetric_id())) {
+						Device d = deviceListModel.getByUniqueDeviceIdentifier(
+								n.getUnique_device_identifier());
+						if (d != null && !pumps.getItems().contains(d)) {
+							pumps.getItems().add(d);
+						}
+					}
+				});
+			}
+		});
+		
+		//...and removal of devices to remove devices.
+		deviceListModel.getContents().addListener((ListChangeListener<Device>) change -> {
+			while (change.next()) {
+				change.getRemoved().forEach(d -> {
+					pumps.getItems().remove(d);
+				});
+			}
+		});
+
+        pumps.setCellFactory(new Callback<ListView<Device>,ListCell<Device>>() {
+			@Override
+			public ListCell<Device> call(ListView<Device> device) {
+				return new ListCell<Device>() {
+                    @Override
+                    protected void updateItem(Device device, boolean empty) {
+                        super.updateItem(device, empty);
+                        if (!empty && device != null) {
+                            setText(device.getModel() + "(" + device.getComPort() + ")");
+                        } else {
+                            setText(null);
+                        }
+                    }
+                };
+			}
+		});
+		
+		pumps.setConverter(new StringConverter<Device>() {
+			@Override
+			public Device fromString(String arg0) {
+				return null;
+			}
+
+			@Override
+			public String toString(Device device) {
+                if (device == null) {
+                    return "";
+                }
+				return device.getModel()+"("+device.getComPort()+")";
+			}
+		});
+
+        pumps.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
+            startButton.setDisable(newValue == null);
+        });
+
         setRunning(false);
         appendStatus("[ACTUATOR] Ready. Waiting for ECIP on DDS bus...");
     }
@@ -181,41 +247,14 @@ public class PumpActuatorApp {
     }
 
     // =========================================================================
-    // Pump discovery
-    // =========================================================================
-
-    private void discoverPump() {
-        numericList.addListener((ListChangeListener<NumericFx>) change -> {
-            while (change.next()) {
-                change.getAddedSubList().forEach(n -> {
-                    if (rosetta.MDC_FLOW_FLUID_PUMP.VALUE.equals(n.getMetric_id())
-                            && targetDevice == null) {
-                        Device d = deviceListModel.getByUniqueDeviceIdentifier(
-                                n.getUnique_device_identifier());
-                        if (d != null) {
-                            targetDevice = d;
-                            Platform.runLater(() -> {
-                                connectedPumpLabel.setText(
-                                    d.getManufacturer() + " " + d.getModel()
-                                    + "  [" + d.getUDI() + "]");
-                                startButton.setDisable(false);
-                                appendStatus("[ACTUATOR] ECIP connected: " + d.getModel());
-                            });
-                        }
-                    }
-                });
-            }
-        });
-    }
-
-    // =========================================================================
     // Trial run control (FXML button handlers)
     // =========================================================================
 
     @FXML
     public void startRun() {
+        Device targetDevice = pumps.getSelectionModel().getSelectedItem();
         if (targetDevice == null) {
-            appendStatus("[ACTUATOR] No ECIP connected — cannot start.");
+            appendStatus("[ACTUATOR] No pump selected — cannot start.");
             return;
         }
         if (!anyCommandTypeSelected()) {
@@ -300,7 +339,7 @@ public class PumpActuatorApp {
 
         ice.FlowRateObjective obj = new ice.FlowRateObjective();
         obj.newFlowRate = rate;
-        obj.unique_device_identifier = targetDevice.getUDI();
+        obj.unique_device_identifier = pumps.getSelectionModel().getSelectedItem().getUDI();
         flowRateWriter.write(obj, InstanceHandle_t.HANDLE_NIL);
 
         publishTrialMarker(runId, trialNum, "CMD_SENT", "RATE_CHANGE",
@@ -311,7 +350,7 @@ public class PumpActuatorApp {
     private void executePause(long runId, int trialNum) {
         ice.InfusionObjective obj = new ice.InfusionObjective();
         obj.stopInfusion = true;
-        obj.unique_device_identifier = targetDevice.getUDI();
+        obj.unique_device_identifier = pumps.getSelectionModel().getSelectedItem().getUDI();
         obj.head = 1;
         infusionObjectiveWriter.write(obj, InstanceHandle_t.HANDLE_NIL);
 
@@ -322,7 +361,7 @@ public class PumpActuatorApp {
     private void executeResume(long runId, int trialNum) {
         ice.InfusionObjective obj = new ice.InfusionObjective();
         obj.stopInfusion = false;
-        obj.unique_device_identifier = targetDevice.getUDI();
+        obj.unique_device_identifier = pumps.getSelectionModel().getSelectedItem().getUDI();
         obj.head = 1;
         infusionObjectiveWriter.write(obj, InstanceHandle_t.HANDLE_NIL);
 
@@ -341,7 +380,7 @@ public class PumpActuatorApp {
         prog.bolusRate    = -1f;   // unchanged
         prog.bolusVolume  = -1f;   // unchanged
         prog.VTBI = vtbi;
-        prog.unique_device_identifier = targetDevice.getUDI();
+        prog.unique_device_identifier = pumps.getSelectionModel().getSelectedItem().getUDI();
         prog.requestor = "MDDTActuator";
         infusionProgramWriter.write(prog, InstanceHandle_t.HANDLE_NIL);
 
@@ -359,7 +398,7 @@ public class PumpActuatorApp {
         prog.bolusRate    = bolusRate;
         prog.bolusVolume  = bolusVolume;
         prog.VTBI         = -1f;   // unchanged
-        prog.unique_device_identifier = targetDevice.getUDI();
+        prog.unique_device_identifier = pumps.getSelectionModel().getSelectedItem().getUDI();
         prog.requestor = "MDDTActuator";
         infusionProgramWriter.write(prog, InstanceHandle_t.HANDLE_NIL);
 
@@ -376,7 +415,7 @@ public class PumpActuatorApp {
     private void executeBadCommand(long runId, int trialNum, float badRate) {
         ice.FlowRateObjective obj = new ice.FlowRateObjective();
         obj.newFlowRate = badRate;
-        obj.unique_device_identifier = targetDevice.getUDI();
+        obj.unique_device_identifier = pumps.getSelectionModel().getSelectedItem().getUDI();
         flowRateWriter.write(obj, InstanceHandle_t.HANDLE_NIL);
 
         String label = badRate > 0 ? "BAD_CMD_OVER_RANGE" : "BAD_CMD_UNDER_RANGE";
@@ -451,7 +490,7 @@ public class PumpActuatorApp {
 
     private void setRunning(boolean isRunning) {
         Platform.runLater(() -> {
-            if (startButton != null) startButton.setDisable(isRunning || targetDevice == null);
+            if (startButton != null) startButton.setDisable(isRunning || pumps.getSelectionModel().getSelectedItem() == null);
             if (stopButton  != null) stopButton.setDisable(!isRunning);
             if (cbRateChange   != null) cbRateChange.setDisable(isRunning);
             if (cbPauseResume  != null) cbPauseResume.setDisable(isRunning);
@@ -460,6 +499,7 @@ public class PumpActuatorApp {
             if (cbBadCommands  != null) cbBadCommands.setDisable(isRunning);
             if (trialsSpinner  != null) trialsSpinner.setDisable(isRunning);
             if (intervalMsSpinner != null) intervalMsSpinner.setDisable(isRunning);
+            if (pumps != null) pumps.setDisable(isRunning);
         });
     }
 

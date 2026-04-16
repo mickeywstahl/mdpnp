@@ -10,6 +10,7 @@
 <?import javafx.scene.control.TextArea?>
 <?import javafx.scene.control.ProgressBar?>
 <?import javafx.scene.control.TitledPane?>
+<?import javafx.scene.control.ComboBox?>
 <?import javafx.geometry.Insets?>
 
 <BorderPane xmlns="http://javafx.com/javafx"
@@ -20,8 +21,8 @@
         <VBox spacing="6" style="-fx-padding: 10;">
             <Label text="MDDT Pump Actuator" style="-fx-font-size: 14; -fx-font-weight: bold;"/>
             <HBox spacing="8" alignment="CENTER_LEFT">
-                <Label text="Connected pump:"/>
-                <Label fx:id="connectedPumpLabel" text="(none)" style="-fx-font-style: italic;"/>
+                <Label text="Target pump:"/>
+                <ComboBox fx:id="pumps" prefWidth="250" promptText="Select a pump..."/>
             </HBox>
         </VBox>
     </top>
