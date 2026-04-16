@@ -50,17 +50,26 @@ public class EventLoop {
     protected void handleMutation(Mutation m) {
         if (m.isAdd()) {
             // log.debug("Handling an add mutation for " + m.getCondition());
-            conditionHandlers.put(m.getCondition(), m.getConditionHandler());
-            waitSet.attach_condition(m.getCondition());
-        } else {
-            // log.debug("Handling a remove mutation for " + m.getCondition());
-            if (null == conditionHandlers.remove(m.getCondition())) {
-                log.warn("Attempt to detach unknown condition:" + m.getCondition());
+            if (m.getCondition() != null) {
+                conditionHandlers.put(m.getCondition(), m.getConditionHandler());
+                waitSet.attach_condition(m.getCondition());
+            } else {
+                log.warn("Attempted to attach a null condition to WaitSet.");
                 for (int i = 0; i < m.getTrace().length; i++) {
                     log.warn("\tat " + m.getTrace()[i]);
                 }
-            } else {
-                waitSet.detach_condition(m.getCondition());
+            }
+        } else {
+            // log.debug("Handling a remove mutation for " + m.getCondition());
+            if (m.getCondition() != null) {
+                if (null == conditionHandlers.remove(m.getCondition())) {
+                    log.warn("Attempt to detach unknown condition:" + m.getCondition());
+                    for (int i = 0; i < m.getTrace().length; i++) {
+                        log.warn("\tat " + m.getTrace()[i]);
+                    }
+                } else {
+                    waitSet.detach_condition(m.getCondition());
+                }
             }
         }
         m.done();

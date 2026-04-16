@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.geometry.Insets?>
+
+<BorderPane xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="org.mdpnp.apps.testapp.mddt.PumpActuatorApp">
+
+    <top>
+        <VBox spacing="6" style="-fx-padding: 10;">
+            <Label text="MDDT Pump Actuator" style="-fx-font-size: 14; -fx-font-weight: bold;"/>
+            <HBox spacing="8" alignment="CENTER_LEFT">
+                <Label text="Connected pump:"/>
+                <Label fx:id="connectedPumpLabel" text="(none)" style="-fx-font-style: italic;"/>
+            </HBox>
+        </VBox>
+    </top>
+
+    <center>
+        <VBox spacing="10" style="-fx-padding: 10;">
+
+            <!-- Command type checkboxes -->
+            <TitledPane text="Command Types" collapsible="false">
+                <VBox spacing="4" style="-fx-padding: 6;">
+                    <CheckBox fx:id="cbRateChange"   text="Rate change"     selected="true"/>
+                    <CheckBox fx:id="cbPauseResume"  text="Pause / Resume"/>
+                    <CheckBox fx:id="cbVtbi"         text="VTBI set"/>
+                    <CheckBox fx:id="cbBolus"        text="Bolus"/>
+                    <CheckBox fx:id="cbBadCommands"  text="Bad commands (out-of-range)"/>
+                </VBox>
+            </TitledPane>
+
+            <!-- Trial configuration -->
+            <GridPane hgap="10" vgap="6">
+                <Label text="Number of trials (N):" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                <Spinner fx:id="trialsSpinner" GridPane.rowIndex="0" GridPane.columnIndex="1"
+                         prefWidth="100" editable="true"/>
+                <Label text="Inter-trial interval (ms):" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                <Spinner fx:id="intervalMsSpinner" GridPane.rowIndex="1" GridPane.columnIndex="1"
+                         prefWidth="100" editable="true"/>
+            </GridPane>
+
+            <!-- Progress -->
+            <HBox spacing="8" alignment="CENTER_LEFT">
+                <Label text="Progress:"/>
+                <Label fx:id="trialProgressLabel" text="0 / 0"/>
+                <ProgressBar fx:id="trialProgressBar" progress="0" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+            </HBox>
+
+            <!-- Buttons -->
+            <HBox spacing="10">
+                <Button fx:id="startButton" text="Start Run" onAction="#startRun"
+                        style="-fx-base: #4CAF50;" disable="true"/>
+                <Button fx:id="stopButton"  text="Stop"      onAction="#stopRun"
+                        style="-fx-base: #f44336;"/>
+            </HBox>
+
+            <!-- Status log -->
+            <Label text="Status:" style="-fx-font-weight: bold;"/>
+            <TextArea fx:id="statusArea" editable="false" wrapText="true"
+                      prefHeight="160" VBox.vgrow="ALWAYS"/>
+        </VBox>
+    </center>
+
+</BorderPane>

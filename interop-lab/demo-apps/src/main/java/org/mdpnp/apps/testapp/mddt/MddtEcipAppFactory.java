@@ -21,10 +21,11 @@ import javafx.scene.Parent;
 
 public class MddtEcipAppFactory implements IceApplicationProvider {
 
+    // Fix: use a valid icon and set disableProperty to null
     private final AppType type = new AppType(
             "MDDT for ECIPs",
-            "noMddtEcip",
-            (URL) MddtEcipAppFactory.class.getResource("/org/mdpnp/apps/testapp/sim/no-sim.png"),
+            null,
+            MddtEcipAppFactory.class.getResource("/org/mdpnp/apps/testapp/chart/chart.png"),
             0.75f,
             false);
 
@@ -43,7 +44,7 @@ public class MddtEcipAppFactory implements IceApplicationProvider {
         final SampleArrayFxList sampleList =
                 parentContext.getBean("sampleArrayList", SampleArrayFxList.class);
         final AlertFxList alertList =
-                parentContext.getBean("alertList", AlertFxList.class);
+                parentContext.getBean("technicalAlertList", AlertFxList.class);
 
         final Subscriber subscriber =
                 (Subscriber) parentContext.getBean("subscriber");

@@ -46,10 +46,21 @@
         <constructor-arg ref="publisher" />
         <constructor-arg ref="domainParticipant" />
     </bean>
+
+    <!-- Additional mapping for infusion objective data writer used in MDDT ECIP apps -->
+    <bean id="infusionObjectiveWriter" class="org.mdpnp.rtiapi.data.InfusionObjectiveDataWriterFactory" lazy-init="true">
+        <constructor-arg ref="publisher" />
+        <constructor-arg ref="domainParticipant" />
+    </bean>
     
     <!-- For programming infusion pumps -->
     <bean id="infusionPumpProgramWriter" class="org.mdpnp.rtiapi.data.InfusionProgramDataWriterFactory" lazy-init="true">
     	<constructor-arg ref="publisher" />
+        <constructor-arg ref="domainParticipant" />
+    </bean>
+
+    <bean id="infusionProgramWriter" class="org.mdpnp.rtiapi.data.InfusionProgramDataWriterFactory" lazy-init="true">
+        <constructor-arg ref="publisher" />
         <constructor-arg ref="domainParticipant" />
     </bean>
     

@@ -27,3 +27,4 @@ org.mdpnp.apps.testapp.pleth.validity.PlethValidityAppFactory
 org.mdpnp.apps.testapp.acliva.AclivaTestApplicationFactory
 org.mdpnp.apps.testapp.mddt.PumpActuatorAppFactory
 org.mdpnp.apps.testapp.mddt.DDSDataLoggerAppFactory
+org.mdpnp.apps.testapp.mddt.MddtEcipAppFactory

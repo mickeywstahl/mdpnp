@@ -32,6 +32,7 @@ org.mdpnp.apps.testapp.DeviceFactory$BioPatchProvider
 org.mdpnp.apps.testapp.DeviceFactory$GESerialProvider
 org.mdpnp.apps.testapp.DeviceFactory$MSeriesScaleProvider
 org.mdpnp.apps.testapp.DeviceFactory$ControllablePump_SimulatorProvider
+org.mdpnp.apps.testapp.DeviceFactory$RealisticPump_SimulatorProvider
 org.mdpnp.apps.testapp.DeviceFactory$ControllableBPMonitor_SimulatorProvider
 org.mdpnp.apps.testapp.DeviceFactory$NKV550Provider
 org.mdpnp.apps.testapp.DeviceFactory$TB800Provider
