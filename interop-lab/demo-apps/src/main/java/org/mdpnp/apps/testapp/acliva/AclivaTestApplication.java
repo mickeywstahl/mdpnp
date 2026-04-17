@@ -59,6 +59,10 @@ import com.rti.dds.subscription.SubscriberQos;
 
 import ice.FlowRateObjective;
 import ice.FlowRateObjectiveDataWriter;
+import ice.InfusionObjective;
+import ice.InfusionObjectiveDataWriter;
+import ice.InfusionProgram;
+import ice.InfusionProgramDataWriter;
 import ice.MDSConnectivity;
 import ice.Patient;
 import javafx.animation.Animation;
@@ -89,6 +93,7 @@ import javafx.scene.control.Spinner;
 import javafx.scene.control.SpinnerValueFactory;
 import javafx.scene.control.TextField;
 import javafx.scene.control.Toggle;
+import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.VBox;
@@ -106,6 +111,8 @@ public class AclivaTestApplication {
 	private NumericFxList numeric;
 	private SampleArrayFxList samples;
 	private FlowRateObjectiveDataWriter writer;
+	private InfusionObjectiveDataWriter infusionObjectiveWriter;
+	private InfusionProgramDataWriter infusionProgramWriter;
 	private MDSHandler mdsHandler;
 	private VitalModel vitalModel;
 	private EMRFacade emr;
@@ -137,6 +144,9 @@ public class AclivaTestApplication {
 
     @FXML private Button runButton;
     @FXML private Button resetButton;
+    @FXML private Button pauseButton;
+    @FXML private Button resumeButton;
+    @FXML private Button bolusButton;
 
     @FXML private Label bisValueLabel;
     @FXML private Label rateValueLabel;
@@ -175,12 +185,14 @@ public class AclivaTestApplication {
 
     // Initialization with required application context and data providers
     public void set(ApplicationContext parentContext, DeviceListModel dlm, NumericFxList numeric, SampleArrayFxList samples,
-			FlowRateObjectiveDataWriter writer, MDSHandler mdsHandler, VitalModel vitalModel, Subscriber subscriber, EMRFacade emr) {
+			FlowRateObjectiveDataWriter writer, InfusionObjectiveDataWriter infusionObjectiveWriter, InfusionProgramDataWriter infusionProgramWriter, MDSHandler mdsHandler, VitalModel vitalModel, Subscriber subscriber, EMRFacade emr) {
 		this.parentContext=parentContext;
 		this.dlm=dlm;
 		this.numeric=numeric;
 		this.samples=samples;
 		this.writer=writer;
+		this.infusionObjectiveWriter = infusionObjectiveWriter;
+		this.infusionProgramWriter = infusionProgramWriter;
 		this.mdsHandler=mdsHandler;
 		this.vitalModel=vitalModel;
 		this.assignedSubscriber=subscriber;
@@ -223,6 +235,9 @@ public class AclivaTestApplication {
         // Button actions
         runButton.setOnAction(e -> runSimulation());
         resetButton.setOnAction(e -> resetSimulation());
+        pauseButton.setOnAction(e -> sendInfusionObjective(true));
+        resumeButton.setOnAction(e -> sendInfusionObjective(false));
+        bolusButton.setOnAction(e -> sendBolus());
 
         // Speed toggle buttons
         speed1x.setOnAction(e  -> { speedMultiplier = 1;  updateSpeedStyle(); });
@@ -257,6 +272,19 @@ public class AclivaTestApplication {
         rateCanvas.heightProperty().addListener((obs, o, n) -> drawRateChart(rateData));
 
         recomputeSchnider();
+
+        pumps.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
+            boolean pumpSelected = newValue != null;
+            runButton.setDisable(!pumpSelected);
+            pauseButton.setDisable(!pumpSelected);
+            resumeButton.setDisable(!pumpSelected);
+            bolusButton.setDisable(!pumpSelected);
+        });
+
+        runButton.setDisable(true);
+        pauseButton.setDisable(true);
+        resumeButton.setDisable(true);
+        bolusButton.setDisable(true);
 
         Platform.runLater(() -> {
             drawBisChart(bisData);
@@ -398,7 +426,6 @@ public class AclivaTestApplication {
     NumericFx[] flowRateFromSelectedPump=new NumericFx[1];
     
     // ── Simulation control ──────────────────────────────────────────────────
-
     private void runSimulation() {
         if (simulationThread != null && simulationThread.isAlive()) {
             return; // Already running — ignore
@@ -586,279 +613,268 @@ public class AclivaTestApplication {
     }
     
     private void setFlowRate(float newRate) {
-		Device selectedPump=pumps.getSelectionModel().getSelectedItem();
-		String pumpUDI=selectedPump.getUDI();
-		FlowRateObjective objective=new FlowRateObjective();
-		objective.newFlowRate=newRate;
-		objective.unique_device_identifier=pumpUDI;
-		
-		writer.write(objective, InstanceHandle_t.HANDLE_NIL);
+        Device selectedPump = pumps.getSelectionModel().getSelectedItem();
+        if (selectedPump == null) return;
+
+        FlowRateObjective objective = new FlowRateObjective();
+        objective.unique_device_identifier = selectedPump.getUDI();
+        objective.newFlowRate = newRate;
+        writer.write(objective, InstanceHandle_t.HANDLE_NIL);
 	}
+
+    private void sendInfusionObjective(boolean stop) {
+        Device selectedPump = pumps.getSelectionModel().getSelectedItem();
+        if (selectedPump == null) return;
+
+        InfusionObjective objective = new InfusionObjective();
+        objective.unique_device_identifier = selectedPump.getUDI();
+        objective.head = 1;
+        objective.stopInfusion = stop;
+        infusionObjectiveWriter.write(objective, InstanceHandle_t.HANDLE_NIL);
+    }
+
+    private void sendBolus() {
+        Device selectedPump = pumps.getSelectionModel().getSelectedItem();
+        if (selectedPump == null) return;
+
+        InfusionProgram program = new InfusionProgram();
+        program.unique_device_identifier = selectedPump.getUDI();
+        program.head = 1;
+        program.requestor = "AclivaTestApp";
+        program.bolusRate = 200f;  // mL/hr
+        program.bolusVolume = 5f;    // mL
+        program.infusionRate = -1f; // Unchanged
+        program.VTBI = -1f;         // Unchanged
+        infusionProgramWriter.write(program, InstanceHandle_t.HANDLE_NIL);
+    }
 
     // ── Chart drawing ───────────────────────────────────────────────────────
 
     private void drawBisChart(List<double[]> data) {
+        GraphicsContext gc = bisCanvas.getGraphicsContext2D();
         double w = bisCanvas.getWidth();
         double h = bisCanvas.getHeight();
-        if (w <= 0 || h <= 0) return;
 
-        GraphicsContext gc = bisCanvas.getGraphicsContext2D();
         gc.clearRect(0, 0, w, h);
-        gc.setFill(Color.web("#F8F9FA"));
-        gc.fillRect(0, 0, w, h);
 
-        int    maintenanceMins = maintenanceSpinner.getValue();
-        double xMax = Math.max(10, 2 + maintenanceMins + 10);
-        if (!data.isEmpty()) {
-            xMax = Math.max(xMax, data.get(data.size() - 1)[0] + 2);
-        }
-        double yMin = 0;
-        double yMax = 100;
-
-        // Margins — generous on all sides
-        double leftMargin   = 52;
-        double rightMargin  = 16;
-        double topMargin    = 36;  // room for title above plot area
-        double bottomMargin = 28;  // room for x-axis labels
-        double cw = w - leftMargin - rightMargin;
-        double ch = h - topMargin - bottomMargin;
-
-        // Plot area white background
-        gc.setFill(Color.WHITE);
-        gc.fillRect(leftMargin, topMargin, cw, ch);
-
-        // ── Bands (drawn first, behind everything) ────────────────────────
-        // Adequate anaesthesia zone 40-60 (green)
-        double y40 = topMargin + mapY(40, yMin, yMax, ch);
-        double y60 = topMargin + mapY(60, yMin, yMax, ch);
-        gc.setFill(Color.web("#E8F5E9"));
-        gc.fillRect(leftMargin, y60, cw, y40 - y60);
-
-        // Dead band 45-55 (yellow)
-        double y45 = topMargin + mapY(45, yMin, yMax, ch);
-        double y55 = topMargin + mapY(55, yMin, yMax, ch);
-        gc.setFill(Color.web("#FFFDE7"));
-        gc.fillRect(leftMargin, y55, cw, y45 - y55);
-
-        // ── Grid lines ────────────────────────────────────────────────────
-        gc.setStroke(Color.web("#E0E0E0"));
-        gc.setLineWidth(0.7);
-        gc.setLineDashes(null);
-        for (int yl : new int[]{ 25, 50, 75, 100 }) {
-            double py = topMargin + mapY(yl, yMin, yMax, ch);
-            gc.strokeLine(leftMargin, py, leftMargin + cw, py);
-        }
-
-        // ── Target line BIS=50 ────────────────────────────────────────────
-        double y50 = topMargin + mapY(50, yMin, yMax, ch);
-        gc.setStroke(Color.web("#E53935"));
-        gc.setLineWidth(1.2);
-        gc.setLineDashes(6, 4);
-        gc.strokeLine(leftMargin, y50, leftMargin + cw, y50);
-        gc.setLineDashes(null);
-
-        // ── Phase boundary lines ──────────────────────────────────────────
-        double inductionEnd = 2.0;
-        double maintEnd     = 2.0 + maintenanceMins;
-        double pxInd   = leftMargin + mapX(inductionEnd, 0, xMax, cw);
-        double pxMaint = leftMargin + mapX(maintEnd,     0, xMax, cw);
-        gc.setStroke(Color.web("#B0BEC5"));
-        gc.setLineWidth(1.0);
-        gc.setLineDashes(4, 4);
-        gc.strokeLine(pxInd,   topMargin, pxInd,   topMargin + ch);
-        gc.strokeLine(pxMaint, topMargin, pxMaint, topMargin + ch);
-        gc.setLineDashes(null);
-
-        // ── Plot border ───────────────────────────────────────────────────
-        gc.setStroke(Color.web("#90A4AE"));
-        gc.setLineWidth(1.0);
-        gc.strokeRect(leftMargin, topMargin, cw, ch);
-
-        // ── Chart title ───────────────────────────────────────────────────
-        gc.setFill(Color.web("#1C2B3A"));
-        gc.setFont(Font.font("System", FontWeight.BOLD, 13));
-        gc.fillText("BIS Index", leftMargin + cw / 2 - 30, topMargin - 8);
-
-        // ── Rotated Y-axis title ──────────────────────────────────────────
-        gc.save();
-        gc.translate(13, topMargin + ch / 2.0);
-        gc.rotate(-90);
-        gc.setFill(Color.web("#37474F"));
-        gc.setFont(Font.font("System", FontWeight.BOLD, 11));
-        gc.fillText("BIS", -12, 0);
-        gc.restore();
-
-        // ── Y-axis tick labels ────────────────────────────────────────────
-        gc.setFill(Color.web("#37474F"));
-        gc.setFont(Font.font("System", 11));
-        for (int yl : new int[]{ 0, 25, 50, 75, 100 }) {
-            String lbl = String.valueOf(yl);
-            double py  = topMargin + mapY(yl, yMin, yMax, ch) + 4;
-            gc.fillText(lbl, leftMargin - (yl == 100 ? 26 : yl >= 10 ? 22 : 16), py);
-        }
-
-        // ── X-axis tick labels ────────────────────────────────────────────
-        int tickInterval;
-        if      (xMax <= 20)  tickInterval = 2;
-        else if (xMax <= 50)  tickInterval = 5;
-        else if (xMax <= 100) tickInterval = 10;
-        else if (xMax <= 200) tickInterval = 20;
-        else                  tickInterval = 30;
-
-        gc.setFill(Color.web("#37474F"));
-        gc.setFont(Font.font("System", 11));
-        for (int xl = 0; xl <= (int) xMax; xl += tickInterval) {
-            double px = leftMargin + mapX(xl, 0, xMax, cw);
-            String lbl = String.valueOf(xl);
-            gc.fillText(lbl, px - (xl >= 100 ? 8 : xl >= 10 ? 6 : 3),
-                        topMargin + ch + 18);
-        }
-
-        // ── X-axis label "Time (min)" centred below ───────────────────────
-        gc.setFont(Font.font("System", 11));
-        gc.fillText("Time (min)", leftMargin + cw / 2 - 28, topMargin + ch + 26);
-
-        // ── Placeholder or BIS trace ──────────────────────────────────────
         if (data.isEmpty()) {
             bisPlaceholder.setVisible(true);
             return;
         }
         bisPlaceholder.setVisible(false);
 
+        double maxTime = maintenanceSpinner.getValue() + 12.0; // Induction + Maint + Recovery
+        double maxBis  = 100.0;
+
+        double leftMargin = 40, rightMargin = 20, topMargin = 30, bottomMargin = 30;
+        double cw = w - leftMargin - rightMargin;
+        double ch = h - topMargin - bottomMargin;
+
+        // Background
+        gc.setFill(Color.web("#F8F9FA"));
+        gc.fillRect(leftMargin, topMargin, cw, ch);
+
+        // Induction phase background
+        double inductionEndPos = (2.0 / maxTime) * cw;
+        gc.setFill(Color.web("#E8F5E9"));
+        gc.fillRect(leftMargin, topMargin, inductionEndPos, ch);
+
+        // Maintenance phase background
+        double maintStartPos = inductionEndPos;
+        double maintEndPos   = ((2.0 + maintenanceSpinner.getValue()) / maxTime) * cw;
+        gc.setFill(Color.web("#FFFDE7"));
+        gc.fillRect(leftMargin + maintStartPos, topMargin, maintEndPos - maintStartPos, ch);
+
+        // Grid lines
+        gc.setStroke(Color.web("#E0E0E0"));
+        gc.setLineWidth(0.5);
+        for (int i = 0; i <= 10; i++) { // Y-axis grid
+            double y = topMargin + (i / 10.0) * ch;
+            gc.strokeLine(leftMargin, y, leftMargin + cw, y);
+        }
+        for (int i = 0; i <= maxTime / 2; i++) { // X-axis grid (every 2 mins)
+            double x = leftMargin + ((i * 2.0) / maxTime) * cw;
+            gc.strokeLine(x, topMargin, x, topMargin + ch);
+        }
+
+        // Target BIS range (40-60)
+        double y40 = topMargin + (1 - 40.0 / maxBis) * ch;
+        double y60 = topMargin + (1 - 60.0 / maxBis) * ch;
+        gc.setStroke(Color.web("#E53935"));
+        gc.setLineDashes(5, 3);
+        gc.strokeLine(leftMargin, y40, leftMargin + cw, y40);
+        gc.strokeLine(leftMargin, y60, leftMargin + cw, y60);
+        gc.setLineDashes(null);
+
+        // Axes
+        gc.setStroke(Color.web("#B0BEC5"));
+        gc.setLineWidth(1.0);
+        gc.strokeLine(leftMargin, topMargin, leftMargin, topMargin + ch); // Y-axis
+        gc.strokeLine(leftMargin, topMargin + ch, leftMargin + cw, topMargin + ch); // X-axis
+
+        // Axis ticks and labels
+        gc.setStroke(Color.web("#90A4AE"));
+        gc.setFill(Color.web("#37474F"));
+
+        // Chart title
+        gc.setFill(Color.web("#1C2B3A"));
+        gc.setFont(Font.font("System", FontWeight.BOLD, 13));
+        gc.fillText("BIS Index", leftMargin + cw / 2 - 30, topMargin - 8);
+
+        // Y-axis labels
+        gc.save();
+        gc.translate(leftMargin - 8, topMargin + ch / 2);
+        gc.rotate(-90);
+        gc.setFill(Color.web("#37474F"));
+        gc.setFont(Font.font("System", FontWeight.BOLD, 11));
+        gc.fillText("BIS", -12, 0);
+        gc.restore();
+
+        gc.setFill(Color.web("#37474F"));
+        gc.setFont(Font.font("System", 11));
+        for (int i = 0; i <= 10; i++) {
+            double y = topMargin + (i / 10.0) * ch;
+            int bisVal = 100 - i * 10;
+            if (bisVal % 20 == 0) {
+                gc.strokeLine(leftMargin - 4, y, leftMargin, y);
+                gc.fillText(String.valueOf(bisVal), leftMargin - 30, y + 4);
+            }
+        }
+
+        // X-axis labels
+        gc.setFill(Color.web("#37474F"));
+        gc.setFont(Font.font("System", 11));
+        for (int i = 0; i <= maxTime / 2; i++) {
+            double x = leftMargin + ((i * 2.0) / maxTime) * cw;
+            gc.strokeLine(x, topMargin + ch, x, topMargin + ch + 4);
+            gc.fillText(String.valueOf(i * 2), x - (i > 0 ? 5 : 0), topMargin + ch + 18);
+        }
+        // ── X-axis label "Time (min)" centred below ───────────────────────
+        gc.setFont(Font.font("System", 11));
+        gc.fillText("Time (min)", leftMargin + cw / 2 - 28, topMargin + ch + 26);
+
+        // Plot data
         gc.setStroke(Color.web("#1565C0"));
         gc.setLineWidth(1.5);
         gc.beginPath();
         boolean first = true;
-        for (double[] pt : data) {
-            double px = leftMargin + mapX(pt[0], 0, xMax, cw);
-            double py = topMargin  + mapY(pt[1], yMin, yMax, ch);
-            if (first) { gc.moveTo(px, py); first = false; }
-            else        { gc.lineTo(px, py); }
+        for (double[] point : data) {
+            double x = leftMargin + (point[0] / maxTime) * cw;
+            double y = topMargin + (1 - point[1] / maxBis) * ch;
+            if (first) {
+                gc.moveTo(x, y);
+                first = false;
+            } else {
+                gc.lineTo(x, y);
+            }
         }
         gc.stroke();
     }
 
     private void drawRateChart(List<double[]> data) {
+        GraphicsContext gc = rateCanvas.getGraphicsContext2D();
         double w = rateCanvas.getWidth();
         double h = rateCanvas.getHeight();
-        if (w <= 0 || h <= 0) return;
 
-        GraphicsContext gc = rateCanvas.getGraphicsContext2D();
         gc.clearRect(0, 0, w, h);
-        gc.setFill(Color.web("#F8F9FA"));
-        gc.fillRect(0, 0, w, h);
 
-        int    maintenanceMins = maintenanceSpinner.getValue();
-        double xMax = Math.max(10, 2 + maintenanceMins + 10);
-        if (!data.isEmpty()) {
-            xMax = Math.max(xMax, data.get(data.size() - 1)[0] + 2);
-        }
-        double yMin = 0;
-        double yMax = 120;
-
-        double leftMargin   = 52;
-        double rightMargin  = 16;
-        double topMargin    = 36;
-        double bottomMargin = 34;
-        double cw = w - leftMargin - rightMargin;
-        double ch = h - topMargin - bottomMargin;
-
-        // Plot area white background
-        gc.setFill(Color.WHITE);
-        gc.fillRect(leftMargin, topMargin, cw, ch);
-
-        // ── Grid lines ────────────────────────────────────────────────────
-        gc.setStroke(Color.web("#E0E0E0"));
-        gc.setLineWidth(0.7);
-        gc.setLineDashes(null);
-        for (int yl : new int[]{ 40, 80, 120 }) {
-            double py = topMargin + mapY(yl, yMin, yMax, ch);
-            gc.strokeLine(leftMargin, py, leftMargin + cw, py);
-        }
-
-        // ── Phase boundary lines ──────────────────────────────────────────
-        double inductionEnd = 2.0;
-        double maintEnd     = 2.0 + maintenanceMins;
-        double pxInd   = leftMargin + mapX(inductionEnd, 0, xMax, cw);
-        double pxMaint = leftMargin + mapX(maintEnd,     0, xMax, cw);
-        gc.setStroke(Color.web("#B0BEC5"));
-        gc.setLineWidth(1.0);
-        gc.setLineDashes(4, 4);
-        gc.strokeLine(pxInd,   topMargin, pxInd,   topMargin + ch);
-        gc.strokeLine(pxMaint, topMargin, pxMaint, topMargin + ch);
-        gc.setLineDashes(null);
-
-        // ── Plot border ───────────────────────────────────────────────────
-        gc.setStroke(Color.web("#90A4AE"));
-        gc.setLineWidth(1.0);
-        gc.strokeRect(leftMargin, topMargin, cw, ch);
-
-        // ── Chart title ───────────────────────────────────────────────────
-        gc.setFill(Color.web("#1C2B3A"));
-        gc.setFont(Font.font("System", FontWeight.BOLD, 13));
-        gc.fillText("Infusion Rate (mL/hr)", leftMargin + cw / 2 - 68, topMargin - 8);
-
-        // ── Rotated Y-axis title ──────────────────────────────────────────
-        gc.save();
-        gc.translate(13, topMargin + ch / 2.0);
-        gc.rotate(-90);
-        gc.setFill(Color.web("#37474F"));
-        gc.setFont(Font.font("System", FontWeight.BOLD, 11));
-        gc.fillText("mL/hr", -18, 0);
-        gc.restore();
-
-        // ── Y-axis tick labels ────────────────────────────────────────────
-        gc.setFill(Color.web("#37474F"));
-        gc.setFont(Font.font("System", 11));
-        for (int yl : new int[]{ 0, 40, 80, 120 }) {
-            String lbl = String.valueOf(yl);
-            double py  = topMargin + mapY(yl, yMin, yMax, ch) + 4;
-            gc.fillText(lbl, leftMargin - (yl == 120 ? 28 : yl >= 10 ? 22 : 16), py);
-        }
-
-        // ── X-axis tick labels ────────────────────────────────────────────
-        int tickInterval;
-        if      (xMax <= 20)  tickInterval = 2;
-        else if (xMax <= 50)  tickInterval = 5;
-        else if (xMax <= 100) tickInterval = 10;
-        else if (xMax <= 200) tickInterval = 20;
-        else                  tickInterval = 30;
-
-        gc.setFill(Color.web("#37474F"));
-        gc.setFont(Font.font("System", 11));
-        for (int xl = 0; xl <= (int) xMax; xl += tickInterval) {
-            double px = leftMargin + mapX(xl, 0, xMax, cw);
-            String lbl = String.valueOf(xl);
-            gc.fillText(lbl, px - (xl >= 100 ? 8 : xl >= 10 ? 6 : 3),
-                        topMargin + ch + 18);
-        }
-
-        // ── X-axis label "Time (min)" ─────────────────────────────────────
-        gc.setFont(Font.font("System", 11));
-        gc.fillText("Time (min)", leftMargin + cw / 2 - 28, topMargin + ch + 26);
-
-        // ── Placeholder or rate trace ─────────────────────────────────────
         if (data.isEmpty()) {
             ratePlaceholder.setVisible(true);
             return;
         }
         ratePlaceholder.setVisible(false);
 
+        double maxTime = maintenanceSpinner.getValue() + 12.0;
+        double maxRate = 150.0;
+
+        double leftMargin = 40, rightMargin = 20, topMargin = 30, bottomMargin = 30;
+        double cw = w - leftMargin - rightMargin;
+        double ch = h - topMargin - bottomMargin;
+
+        // Background
+        gc.setFill(Color.web("#F8F9FA"));
+        gc.fillRect(leftMargin, topMargin, cw, ch);
+
+        // Grid lines
+        gc.setStroke(Color.web("#E0E0E0"));
+        gc.setLineWidth(0.5);
+        for (int i = 0; i <= 6; i++) { // Y-axis grid
+            double y = topMargin + (i / 6.0) * ch;
+            gc.strokeLine(leftMargin, y, leftMargin + cw, y);
+        }
+        for (int i = 0; i <= maxTime / 2; i++) { // X-axis grid
+            double x = leftMargin + ((i * 2.0) / maxTime) * cw;
+            gc.strokeLine(x, topMargin, x, topMargin + ch);
+        }
+
+        // Axes
+        gc.setStroke(Color.web("#B0BEC5"));
+        gc.setLineWidth(1.0);
+        gc.strokeLine(leftMargin, topMargin, leftMargin, topMargin + ch); // Y-axis
+        gc.strokeLine(leftMargin, topMargin + ch, leftMargin + cw, topMargin + ch); // X-axis
+
+        // Axis ticks and labels
+        gc.setStroke(Color.web("#90A4AE"));
+        gc.setFill(Color.web("#37474F"));
+
+        // Chart title
+        gc.setFill(Color.web("#1C2B3A"));
+        gc.setFont(Font.font("System", FontWeight.BOLD, 13));
+        gc.fillText("Infusion Rate (mL/hr)", leftMargin + cw / 2 - 68, topMargin - 8);
+
+        // Y-axis labels
+        gc.save();
+        gc.translate(leftMargin - 8, topMargin + ch / 2);
+        gc.rotate(-90);
+        gc.setFill(Color.web("#37474F"));
+        gc.setFont(Font.font("System", FontWeight.BOLD, 11));
+        gc.fillText("mL/hr", -18, 0);
+        gc.restore();
+
+        gc.setFill(Color.web("#37474F"));
+        gc.setFont(Font.font("System", 11));
+        for (int i = 0; i <= 6; i++) {
+            double y = topMargin + (i / 6.0) * ch;
+            int rateVal = (int) (maxRate - i * (maxRate / 6.0));
+            if (rateVal % 50 == 0) {
+                gc.strokeLine(leftMargin - 4, y, leftMargin, y);
+                gc.fillText(String.valueOf(rateVal), leftMargin - 30, y + 4);
+            }
+        }
+
+        // X-axis labels
+        gc.setFill(Color.web("#37474F"));
+        gc.setFont(Font.font("System", 11));
+        for (int i = 0; i <= maxTime / 2; i++) {
+            double x = leftMargin + ((i * 2.0) / maxTime) * cw;
+            gc.strokeLine(x, topMargin + ch, x, topMargin + ch + 4);
+            gc.fillText(String.valueOf(i * 2), x - (i > 0 ? 5 : 0), topMargin + ch + 18);
+        }
+        // ── X-axis label "Time (min)" ─────────────────────────────────────
+        gc.setFont(Font.font("System", 11));
+        gc.fillText("Time (min)", leftMargin + cw / 2 - 28, topMargin + ch + 26);
+
+        // Plot data
         gc.setStroke(Color.web("#00695C"));
         gc.setLineWidth(1.5);
         gc.beginPath();
         boolean first = true;
-        for (double[] pt : data) {
-            double px = leftMargin + mapX(pt[0], 0, xMax, cw);
-            double py = topMargin  + mapY(pt[1], yMin, yMax, ch);
-            if (first) { gc.moveTo(px, py); first = false; }
-            else        { gc.lineTo(px, py); }
+        for (double[] point : data) {
+            double x = leftMargin + (point[0] / maxTime) * cw;
+            double y = topMargin + (1 - point[1] / maxRate) * ch;
+            if (first) {
+                gc.moveTo(x, y);
+                first = false;
+            } else {
+                gc.lineTo(x, y);
+            }
         }
         gc.stroke();
     }
-
-    class DeviceListCell extends ListCell<Device> {
-        @Override protected void updateItem(Device device, boolean empty) {
+    
+    private static class DeviceListCell extends ListCell<Device> {
+        @Override
+        protected void updateItem(Device device, boolean empty) {
             super.updateItem(device, empty);
             if (!empty && device != null) {
                 setText(device.getModel()+"("+device.getComPort()+")");
@@ -866,17 +882,5 @@ public class AclivaTestApplication {
                 setText(null);
             }
         }
-    }
-
-    // ── Coordinate mapping helpers ──────────────────────────────────────────
-
-    /** Map a data x value to canvas pixel x within the given pixel width. */
-    private double mapX(double x, double xMin, double xMax, double width) {
-        return (x - xMin) / (xMax - xMin) * width;
-    }
-
-    /** Map a data y value to canvas pixel y (inverted — y=0 is at bottom). */
-    private double mapY(double y, double yMin, double yMax, double height) {
-        return height - ((y - yMin) / (yMax - yMin) * height);
     }
 }

@@ -20,6 +20,8 @@ import org.springframework.context.ApplicationContext;
 import com.rti.dds.subscription.Subscriber;
 
 import ice.FlowRateObjectiveDataWriter;
+import ice.InfusionObjectiveDataWriter;
+import ice.InfusionProgramDataWriter;
 
 public class AclivaTestApplicationFactory implements IceApplicationProvider {
 
@@ -54,6 +56,12 @@ public class AclivaTestApplicationFactory implements IceApplicationProvider {
         //"flowRateObjectiveWriter" is a new bean in IceAppContainerContext.xml
         final FlowRateObjectiveDataWriter objectiveWriter=(FlowRateObjectiveDataWriter) parentContext.getBean("flowRateObjectiveWriter");
         
+        final InfusionObjectiveDataWriter infusionObjectiveWriter =
+                (InfusionObjectiveDataWriter) parentContext.getBean("objectiveWriter");
+
+        final InfusionProgramDataWriter infusionProgramWriter =
+            (InfusionProgramDataWriter) parentContext.getBean("infusionPumpProgramWriter");
+        
         final MDSHandler mdsHandler=(MDSHandler)parentContext.getBean("mdsConnectivity",MDSHandler.class);
         mdsHandler.start();
 
@@ -66,7 +74,7 @@ public class AclivaTestApplicationFactory implements IceApplicationProvider {
        
         final AclivaTestApplication controller = ((AclivaTestApplication) loader.getController());
         
-        controller.set(parentContext, deviceListModel, numericList, sampleList, objectiveWriter, mdsHandler, vitalModel, subscriber, emr);
+        controller.set(parentContext, deviceListModel, numericList, sampleList, objectiveWriter, infusionObjectiveWriter, infusionProgramWriter, mdsHandler, vitalModel, subscriber, emr);
         
         controller.start(eventLoop, subscriber);
 
